@@ -7,24 +7,18 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract Distributor is Ownable
 {
-    event Authorized(address,bool);
-    event AuthorizationToggled(address, bool, bool);
-    event DistributionFrozen(bool);
-    event TokenAdded(address);
-    event TokenRemoved(address);
-    event ReceiverUpdate(address, uint, uint, uint, bool);
-    event DistributionOn(uint);
-    event balanceInsufficient(address, uint);
-    event PassedCheck(address, bool);
-
+    
     constructor()
     {  
+
         recieverEditable = true;
         frozenVal = false;
         tokenTypes = 0;
         totalDistributions = 0;
         balanceSufficient = false;
         addGammaUsed = false;
+        nextInterval = 604740;
+
         lastDistribution = block.timestamp;        
 
         address _owner = owner();
@@ -34,22 +28,52 @@ contract Distributor is Ownable
 
     }
 
-    uint lastDistribution;
-    bool recieverEditable;
-    mapping(address => bool) public authorized;
-    bool internal frozenVal;
-    address[] public token;        
-    uint tokenTypes;
-    uint totalDistributions;
-    receiverStruct[] public receiverList;
-    uint[] public balanceNeeded;
-    bool internal balanceSufficient;
-    address internal emergencyWallet;
+    bool internal balanceSufficient;  
+    
     bool internal addGammaUsed;
 
-    modifier onlyWeekly 
+    bool internal frozenVal;
+
+    bool internal recieverEditable;
+
+    uint tokenTypes;
+    
+    uint totalDistributions;
+
+    uint lastDistribution;
+
+    uint nextInterval;
+
+    address internal emergencyWallet;
+
+    mapping(address => bool) public authorized;
+
+    uint[] private balanceNeeded;
+    
+    address[] public token;          
+    
+    receiverStruct[] public receiverList;
+
+    event IntervalSet(uint);
+    event Authorized(address,bool);
+    event AuthorizationToggled(address, bool, bool);
+    event DistributionFrozen(bool);
+    event TokenAdded(address);
+    event TokenRemoved(address);
+    event ReceiverUpdate(address, uint, uint, uint, bool);
+    event DistributionOn(uint);
+    event balanceInsufficient(address, uint);
+    event PassedCheck(address, bool);
+    
+    function setNextInterval(uint _nextInterval) public onlyOwner
     {
-      require(block.timestamp > lastDistribution + 604740, "Sufficient hame hasn't passed since contract was last called");
+        nextInterval = _nextInterval;
+        emit IntervalSet(nextInterval);
+    }
+
+    modifier onInterval 
+    {
+      require(block.timestamp > lastDistribution + nextInterval, "Sufficient time hasn't passed since contract was last called");
       _;
     }
 
@@ -224,7 +248,7 @@ contract Distributor is Ownable
         recieverEditable = true;
     }
         
-    function distributeToAll() external payable onlyAuthorized onlyWeekly
+    function distributeToAll() external payable onlyAuthorized onInterval
     {
         require(balanceSufficient == true, "Insufficient balance");
 
