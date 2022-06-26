@@ -49,7 +49,7 @@ contract Distributor is Ownable
     mapping(address => bool) public authorized;
 
     uint[] private balanceNeeded;
-    
+
     address[] public token;          
     
     receiverStruct[] public receiverList;
@@ -60,7 +60,7 @@ contract Distributor is Ownable
     event DistributionFrozen(bool);
     event TokenAdded(address);
     event TokenRemoved(address);
-    event ReceiverUpdate(address, uint, uint, uint, bool);
+    event ReceiverUpdate(address, uint, uint, uint, uint, uint, bool);
     event DistributionOn(uint);
     event balanceInsufficient(address, uint);
     event PassedCheck(address, bool);
@@ -176,25 +176,30 @@ contract Distributor is Ownable
         uint distributionID;
         uint tokenID;
         uint receiveAmt;
+        uint lastReceived;
+        uint intervalOf;
         bool willReceive;
     }
 
-    function AddReceiver(address _receiverAdd, uint _tokenID, uint _receiveAmt) external onlyAuthorized editProtection
+    function AddReceiver(address _receiverAdd, uint _tokenID, uint _receiveAmt, uint _intervalOf) external onlyAuthorized editProtection
     {
-        receiverList[totalDistributions] = receiverStruct(_receiverAdd, totalDistributions, _tokenID, _receiveAmt, true);
-        emit ReceiverUpdate(_receiverAdd, totalDistributions, _tokenID, _receiveAmt, true);
+
+        receiverList[totalDistributions] = receiverStruct(_receiverAdd, totalDistributions, _tokenID, _receiveAmt, 0, _intervalOf, true);
+        emit ReceiverUpdate(_receiverAdd, totalDistributions, _tokenID, _receiveAmt, 0, _intervalOf, true);
         totalDistributions = totalDistributions + 1;
         balanceNeeded[_tokenID] = balanceNeeded[_tokenID] + _receiveAmt;
         
     }
 
-    function UpdateReceiver(address _receiverAdd, uint _distributionID, uint _tokenID, uint _receiveAmt, bool _willReceive) external onlyAuthorized editProtection
+    function UpdateReceiver(address _receiverAdd, uint _distributionID, uint _tokenID, uint _receiveAmt, uint _intervalOf, bool _willReceive) external onlyAuthorized editProtection
     {
         uint previousAmt = receiverList[_distributionID].receiveAmt;
         balanceNeeded[_tokenID] = balanceNeeded[_tokenID] - previousAmt;  
+
+        uint _lastReceived = receiverList[_distributionID].lastReceived;
         
-        receiverList[_distributionID] = receiverStruct(_receiverAdd, _distributionID, _tokenID, _receiveAmt, _willReceive);
-        emit ReceiverUpdate(_receiverAdd, _distributionID, _tokenID, _receiveAmt, _willReceive);
+        receiverList[_distributionID] = receiverStruct(_receiverAdd, _distributionID, _tokenID, _receiveAmt, _lastReceived, _intervalOf, _willReceive);
+        emit ReceiverUpdate(_receiverAdd, _distributionID, _tokenID, _receiveAmt, _lastReceived, _intervalOf, _willReceive);
         
         balanceNeeded[_tokenID] = balanceNeeded[_tokenID] + _receiveAmt;
     }
@@ -251,10 +256,18 @@ contract Distributor is Ownable
     function distributeToAll() external payable onlyAuthorized onInterval
     {
         require(balanceSufficient == true, "Insufficient balance");
+        
+        checkSufficient();
 
-        for(uint i = 0; i < totalDistributions; i++)
+        for(uint _distributionID = 0; _distributionID < totalDistributions; _distributionID++)
         {
-            IERC20(getTokenAddressByID(receiverList[i].tokenID)).transferFrom(address(this), receiverList[i].receiverAdd, receiverList[i].receiveAmt);
+            uint _lastReceived = receiverList[_distributionID].lastReceived;
+            uint _intervalOf = receiverList[_distributionID].intervalOf;
+                        
+            if(block.timestamp > _lastReceived + _intervalOf)
+            {
+                IERC20(getTokenAddressByID(receiverList[_distributionID].tokenID)).transferFrom(address(this), receiverList[_distributionID].receiverAdd, receiverList[_distributionID].receiveAmt);
+            }
         }
 
         balanceSufficient = false;
@@ -273,10 +286,8 @@ contract Distributor is Ownable
         {
             uint allFunds = IERC20(getTokenAddressByID(_tokenID)).balanceOf(address(this));
             IERC20(getTokenAddressByID(_tokenID)).transferFrom(address(this), emergencyWallet, allFunds);
-
         }
 
     }
 
 }
-
